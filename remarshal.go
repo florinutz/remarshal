@@ -36,7 +36,8 @@ type change struct {
 	ReValue *regexValue
 }
 
-type worker struct {
+// Worker does the heavy lifting behind the exported RegexUnmarshal function
+type Worker struct {
 	Text             string
 	Re               *regexp.Regexp
 	V                *interface{}
@@ -212,7 +213,8 @@ func getChanges(fields []*field, values []*regexValue) (changes []*change) {
 	return
 }
 
-func (worker *worker) ApplyChanges() (errs []error) {
+// ApplyChanges sets the computed value changeset on the struct
+func (worker *Worker) ApplyChanges() (errs []error) {
 	value := worker.reflectValue.Elem()
 	for _, change := range worker.Changes {
 		reflectValue := value.FieldByName(change.Field.Name)
@@ -292,10 +294,10 @@ func (worker *worker) ApplyChanges() (errs []error) {
 	return
 }
 
-// NewWorker instantiates the worker type, which implements the RegexUnmarshaler interface
-func NewWorker(text string, re *regexp.Regexp, v interface{}) (w *worker, errs []error) {
+// NewWorker instantiates the Worker type, which implements the RegexUnmarshaler interface
+func NewWorker(text string, re *regexp.Regexp, v interface{}) (w *Worker, errs []error) {
 	var err error
-	w = &worker{}
+	w = &Worker{}
 
 	w.reflectValue, err = validate(v)
 	if err != nil {
@@ -339,7 +341,7 @@ func NewWorker(text string, re *regexp.Regexp, v interface{}) (w *worker, errs [
 	return
 }
 
-func (worker *worker) String() string {
+func (worker *Worker) String() string {
 	var render bytes.Buffer
 	err := workerTemplate.ExecuteTemplate(&render, "worker", worker)
 	if err != nil {
