@@ -1,4 +1,6 @@
-# remarshal [![Build Status](https://travis-ci.org/florinutz/remarshal.svg?branch=master)](https://travis-ci.org/florinutz/remarshal) [![Go Report Card](https://goreportcard.com/badge/github.com/florinutz/remarshal)](https://goreportcard.com/report/github.com/florinutz/remarshal)
+# remarshal
+[![Build Status](https://travis-ci.org/florinutz/remarshal.svg?branch=master)](https://travis-ci.org/florinutz/remarshal) [![Go Report Card](https://goreportcard.com/badge/github.com/florinutz/remarshal)](https://goreportcard.com/report/github.com/florinutz/remarshal)
+[![GoDoc](https://godoc.org/github.com/florinutz/remarshal?status.svg)](https://godoc.org/github.com/florinutz/remarshal)
 
 The package looks up for values in a string and then attaches them to an existing struct's fields. It exposes one interface `RegexUnmarshaler`
 
