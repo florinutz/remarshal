@@ -1,6 +1,6 @@
 /*
 Package remarshal uses regex patterns in order to unpack strings into struct properties
-and the other way arround, in the future.
+and the other way around, in the future.
 */
 package remarshal
 
