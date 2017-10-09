@@ -1,4 +1,4 @@
-# remarshal [![Build Status](https://travis-ci.org/florinutz/reverse_stringer.svg?branch=master)](https://travis-ci.org/florinutz/reverse_stringer)
+# remarshal [![Build Status](https://travis-ci.org/florinutz/remarshal.svg?branch=master)](https://travis-ci.org/florinutz/reverse_stringer)
 
 The package looks up for values in a string and then attaches them to an existing struct's fields. It exposes one interface `RegexUnmarshaler`
 
