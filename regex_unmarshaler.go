@@ -17,23 +17,29 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
+// RegexUnmarshaler describes the main functionality of this package.
+// Something that implements it can extract data into the last argument's fields.
+type RegexUnmarshaler interface {
+	RegexUnmarshal([]byte, interface{}, *regexp.Regexp) error
+}
+
 // StructTag is the custom struct tag name
 const StructTag string = "regex_group"
 
-type field struct {
+type Field struct {
 	reflect.StructField
 	tagValue         *string
 	tagIsSetManually *bool
 }
 
-type regexValue struct {
-	Group string
+type StringSlice struct {
+	Key   string
 	Value string
 }
 
-type change struct {
-	Field   *field
-	ReValue *regexValue
+type Change struct {
+	Field       *Field
+	StringSlice *StringSlice
 }
 
 // Worker does the heavy lifting behind the exported RegexUnmarshal function
@@ -42,10 +48,10 @@ type Worker struct {
 	Re               *regexp.Regexp
 	V                *interface{}
 	reflectValue     *reflect.Value
-	Values           []*regexValue
-	Fields           []*field
-	Changes          []*change
-	ExtraFields      []*field
+	Values           []*StringSlice
+	Fields           []*Field
+	Changes          []*Change
+	ExtraFields      []*Field
 	ExtraRegexGroups []string
 }
 
@@ -62,7 +68,7 @@ func init() {
 	struct: {{.V}}
 
 * Fields:
-	{{range .Fields}}{{.String}}{{$fieldName := .GetTagValue}}{{range $.Values}}{{if eq .Group $fieldName }} => {{.Value}}{{end}}{{end}}
+	{{range .Fields}}{{.String}}{{$fieldName := .GetTagValue}}{{range $.Values}}{{if eq .Key $fieldName }} => {{.Value}}{{end}}{{end}}
 	{{end}}
 * Extra regex groups:
 	{{join .ExtraRegexGroups ", "}}
@@ -74,25 +80,25 @@ func init() {
 	workerTemplate = template.Must(template.New("worker").Funcs(fm).Parse(str))
 }
 
-func (field *field) lookupTagIfNeeded() {
+func (field *Field) lookupTagIfNeeded() {
 	if field.tagValue == nil || field.tagIsSetManually == nil {
 		tagValue, setManually := field.Tag.Lookup(StructTag)
 		field.tagValue, field.tagIsSetManually = &tagValue, &setManually
 	}
 }
 
-func (field *field) GetTagValue() string {
+func (field *Field) GetTagValue() string {
 	field.lookupTagIfNeeded()
 	return *field.tagValue
 }
 
-func (field *field) isTagSetManually() bool {
+func (field *Field) isTagSetManually() bool {
 	field.lookupTagIfNeeded()
 	return *field.tagIsSetManually
 }
 
 // Lookup for interesting fields
-func lookupFields(typeOf reflect.Type) (fields []*field, err error) {
+func lookupFields(typeOf reflect.Type) (fields []*Field, err error) {
 	// parsing of fields
 	for i := 0; i < typeOf.NumField(); i++ {
 		field := makeField(typeOf.Field(i))
@@ -113,14 +119,14 @@ func lookupFields(typeOf reflect.Type) (fields []*field, err error) {
 	}
 	return
 }
-func (field *field) impersonate(targetField *field) {
+func (field *Field) impersonate(targetField *Field) {
 	field.StructField = targetField.StructField
 	field.tagValue = targetField.tagValue
 	field.tagIsSetManually = targetField.tagIsSetManually
 }
 
-func makeField(f reflect.StructField) *field {
-	field := &field{f, nil, nil}
+func makeField(f reflect.StructField) *Field {
+	field := &Field{f, nil, nil}
 	field.lookupTagIfNeeded()
 	if *field.tagValue == "" {
 		field.tagValue = &field.Name
@@ -129,7 +135,7 @@ func makeField(f reflect.StructField) *field {
 }
 
 // Returns the existing field or nil
-func (field *field) isAmong(fields []*field) *field {
+func (field *Field) isAmong(fields []*Field) *Field {
 	for _, f := range fields {
 		if field.GetTagValue() == f.GetTagValue() {
 			return f
@@ -138,57 +144,45 @@ func (field *field) isAmong(fields []*field) *field {
 	return nil
 }
 
-func validate(v interface{}) (*reflect.Value, error) {
-	// validation
-	valueOf := reflect.ValueOf(v)
-	if valueOf.Type().Kind() != reflect.Ptr {
-		return nil, errors.New("this param is supposed to be a pointer to struct")
-	}
-	if valueOf.Elem().Type().Kind() != reflect.Struct {
-		return nil, errors.New("the value at the end of the pointer is not a struct")
-	}
-	return &valueOf, nil
-}
-
 // Computes the regex string map (group => value)
 // The error is returned when there was no match
-func stringToValues(data string, re *regexp.Regexp) (values []*regexValue, err error) {
+func stringToValues(data string, re *regexp.Regexp) (values []*StringSlice, err error) {
 	match := re.FindStringSubmatch(data)
 	if match == nil {
 		return nil, errors.New("no regex match")
 	}
 	reGroups := re.SubexpNames()[1:]
 	for i, value := range match[1:] {
-		values = append(values, &regexValue{
-			Group: reGroups[i],
+		values = append(values, &StringSlice{
+			Key:   reGroups[i],
 			Value: value,
 		})
 	}
 	return
 }
 
-func getExtraRegexGroups(fields []*field, values []*regexValue) (extra []string) {
+func getExtraStringMapKeys(fields []*Field, values []*StringSlice) (extra []string) {
 	extra = []string{}
 	for _, value := range values {
 		match := false
 		for _, field := range fields {
-			if field.GetTagValue() == value.Group {
+			if field.GetTagValue() == value.Key {
 				match = true
 				break
 			}
 		}
 		if !match {
-			extra = append(extra, value.Group)
+			extra = append(extra, value.Key)
 		}
 	}
 	return
 }
 
-func getExtraTags(fields []*field, values []*regexValue) (extra []*field) {
+func getExtraTags(fields []*Field, values []*StringSlice) (extra []*Field) {
 	for _, field := range fields {
 		match := false
 		for _, value := range values {
-			if field.GetTagValue() == value.Group {
+			if field.GetTagValue() == value.Key {
 				match = true
 			}
 		}
@@ -199,13 +193,13 @@ func getExtraTags(fields []*field, values []*regexValue) (extra []*field) {
 	return
 }
 
-func getChanges(fields []*field, values []*regexValue) (changes []*change) {
+func getChanges(fields []*Field, values []*StringSlice) (changes []*Change) {
 	for _, value := range values {
 		for _, field := range fields {
-			if field.GetTagValue() == value.Group {
-				changes = append(changes, &change{
-					ReValue: value,
-					Field:   field,
+			if field.GetTagValue() == value.Key {
+				changes = append(changes, &Change{
+					StringSlice: value,
+					Field:       field,
 				})
 			}
 		}
@@ -220,13 +214,13 @@ func (worker *Worker) ApplyChanges() (errs []error) {
 		reflectValue := value.FieldByName(change.Field.Name)
 		if !reflectValue.CanSet() {
 			errs = append(errs, fmt.Errorf("can't set value '%s' for field '%s'",
-				change.ReValue.Value,
+				change.StringSlice.Value,
 				change.Field.Name,
 			))
 			continue
 		}
 
-		newValue := change.ReValue.Value
+		newValue := change.StringSlice.Value
 		fieldType, _ := value.Type().FieldByName(change.Field.Name)
 		dataType := fieldType.Type.Kind()
 
@@ -238,8 +232,8 @@ func (worker *Worker) ApplyChanges() (errs []error) {
 			if err != nil {
 				errStr := "value '%s' of regex group '%s' can't be converted to int in order to be assigned to field '%s'"
 				errs = append(errs, fmt.Errorf(errStr,
-					change.ReValue.Value,
-					change.ReValue.Group,
+					change.StringSlice.Value,
+					change.StringSlice.Key,
 					change.Field.Name,
 				))
 				continue
@@ -250,8 +244,8 @@ func (worker *Worker) ApplyChanges() (errs []error) {
 			if err != nil {
 				errStr := "value '%s' of regex group '%s' can't be converted to int in order to be assigned to field '%s'"
 				errs = append(errs, fmt.Errorf(errStr,
-					change.ReValue.Value,
-					change.ReValue.Group,
+					change.StringSlice.Value,
+					change.StringSlice.Key,
 					change.Field.Name,
 				))
 				continue
@@ -262,8 +256,8 @@ func (worker *Worker) ApplyChanges() (errs []error) {
 			if err != nil {
 				errStr := "value '%s' of regex group '%s' can't be converted to float in order to be assigned to field '%s'"
 				errs = append(errs, fmt.Errorf(errStr,
-					change.ReValue.Value,
-					change.ReValue.Group,
+					change.StringSlice.Value,
+					change.StringSlice.Key,
 					change.Field.Name,
 				))
 				continue
@@ -274,8 +268,8 @@ func (worker *Worker) ApplyChanges() (errs []error) {
 			if err != nil {
 				errStr := "value '%s' of regex group '%s' can't be converted to bool in order to be assigned to field '%s'"
 				errs = append(errs, fmt.Errorf(errStr,
-					change.ReValue.Value,
-					change.ReValue.Group,
+					change.StringSlice.Value,
+					change.StringSlice.Key,
 					change.Field.Name,
 				))
 				continue
@@ -286,16 +280,28 @@ func (worker *Worker) ApplyChanges() (errs []error) {
 			errs = append(errs, fmt.Errorf(errStr,
 				change.Field.Name,
 				dataType.String(),
-				change.ReValue.Value,
-				change.ReValue.Group,
+				change.StringSlice.Value,
+				change.StringSlice.Key,
 			))
 		}
 	}
 	return
 }
 
+func validate(v interface{}) (*reflect.Value, error) {
+	// validation
+	valueOf := reflect.ValueOf(v)
+	if valueOf.Type().Kind() != reflect.Ptr {
+		return nil, errors.New("this param is supposed to be a pointer to struct")
+	}
+	if valueOf.Elem().Type().Kind() != reflect.Struct {
+		return nil, errors.New("the value at the end of the pointer is not a struct")
+	}
+	return &valueOf, nil
+}
+
 // NewWorker instantiates the Worker type, which implements the RegexUnmarshaler interface
-func NewWorker(text string, re *regexp.Regexp, v interface{}) (w *Worker, errs []error) {
+func NewWorker(text string, v interface{}, re *regexp.Regexp) (w *Worker, errs []error) {
 	var err error
 	w = &Worker{}
 
@@ -320,7 +326,7 @@ func NewWorker(text string, re *regexp.Regexp, v interface{}) (w *Worker, errs [
 	w.Fields = fields
 
 	// these are ok, as the user might reuse the regex pattern
-	w.ExtraRegexGroups = getExtraRegexGroups(w.Fields, w.Values)
+	w.ExtraRegexGroups = getExtraStringMapKeys(w.Fields, w.Values)
 
 	// not ok, check your struct tags pls
 	w.ExtraFields = getExtraTags(w.Fields, w.Values)
@@ -350,28 +356,22 @@ func (worker *Worker) String() string {
 	return render.String()
 }
 
-func (field *field) String() string {
+func (field *Field) String() string {
 	return fmt.Sprintf("%d. %s `%s`", field.Index[0]+1, field.Name, *field.tagValue)
 }
 
-func (v *regexValue) String() string {
-	return fmt.Sprintf("%s: %s", v.Group, v.Value)
+func (v *StringSlice) String() string {
+	return fmt.Sprintf("%s: %s", v.Key, v.Value)
 }
 
-func (change *change) String() string {
-	return fmt.Sprintf("%s => %s", change.Field.Name, change.ReValue.Value)
-}
-
-// RegexUnmarshaler describes the main functionality of this package.
-// Something that implements it can extract data into the last argument's fields.
-type RegexUnmarshaler interface {
-	RegexUnmarshal([]byte, *regexp.Regexp, interface{}) error
+func (change *Change) String() string {
+	return fmt.Sprintf("%s => %s", change.Field.Name, change.StringSlice.Value)
 }
 
 // RegexUnmarshal is an example implementation of the RegexUnmarshaler interface
-func RegexUnmarshal(text string, re *regexp.Regexp, v interface{}) error {
+func RegexUnmarshal(text string, v interface{}, re *regexp.Regexp) error {
 	var multiError *multierror.Error
-	worker, errs := NewWorker(text, re, v)
+	worker, errs := NewWorker(text, v, re)
 	if len(errs) > 0 {
 		// these should be validation errors, so fatal, so let's return
 		return multierror.Append(multiError, errs...)
