@@ -5,18 +5,13 @@ import (
 	"reflect"
 )
 
-// A StringValuesMapper can parse a string for its values
-type StringValuesMapper interface {
-	GetStringMap(string) (map[string]string, error)
-}
-
-// A StructValuesSetter can apply a set of values over a structs fields
+// StructValuesSetter can apply a set of values over a structs fields by matching values keys with field names
 type StructValuesSetter interface {
 	ApplyValues(interface{}, map[string]string) []error
 }
 
 // Worker does the heavy lifting behind the exported RegexUnmarshal function
-type Worker2 struct {
+type funcWorker struct {
 	Text             string
 	V                *interface{}
 	reflectValue     *reflect.Value
@@ -27,34 +22,33 @@ type Worker2 struct {
 	ExtraRegexGroups []string
 }
 
-func NewFuncWorker(text string, v interface{}, mapper StringValuesMapper) (w *Worker2, errs []error) {
+func NewFuncWorker(
+	text string,
+	v interface{},
+	strMapper StringValuesMapper,
+	structValuesSetter StructValuesSetter,
+) (w *funcWorker, errs []error) {
 	var err error
-	w = &Worker2{}
+	w = &funcWorker{}
+
+	values, err := getStringMap(text, strMapper)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	w.Values = values
 
 	w.reflectValue, err = validate(v)
 	if err != nil {
 		errs = append(errs, err)
 		return // v is not a pointer to a struct
 	}
+	w.V = &v
 
 	fields, err := lookupFields(w.reflectValue.Elem().Type())
 	if err != nil {
 		// 2 or more tags point to the same re group
 		errs = append(errs, err)
 	}
-
-	stringMap, err := mapper.GetStringMap(text)
-	if err != nil {
-		// no match
-		errs = append(errs, err)
-	}
-	values := []*StringSlice{}
-	for key, val := range stringMap {
-		values = append(values, &StringSlice{Key: key, Value: val})
-	}
-
-	w.V = &v
-	w.Values = values
 	w.Fields = fields
 
 	// these are ok, as the user might reuse the regex pattern
@@ -76,4 +70,16 @@ func NewFuncWorker(text string, v interface{}, mapper StringValuesMapper) (w *Wo
 	w.Text = text
 
 	return
+}
+
+func getStringMap(text string, mapper StringValuesMapper) ([]*StringSlice, error) {
+	stringMap, err := mapper.GetStringMap(text)
+	if err != nil {
+		return nil, err
+	}
+	values := []*StringSlice{}
+	for key, val := range stringMap {
+		values = append(values, &StringSlice{Key: key, Value: val})
+	}
+	return values, nil
 }
