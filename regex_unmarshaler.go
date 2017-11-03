@@ -103,8 +103,8 @@ func lookupFields(typeOf reflect.Type) (fields []*Field, err error) {
 	for i := 0; i < typeOf.NumField(); i++ {
 		field := makeField(typeOf.Field(i))
 		if existingField := field.isAmong(fields); existingField != nil {
-			if existingField.isTagSetManually() && field.isTagSetManually() { // conflict
-				return nil, fmt.Errorf(`regex group "%s" can't point to both "%s" and "%s"`,
+			if existingField.isTagSetManually() && field.isTagSetManually() { // conflict for double tag on the struct
+				return nil, fmt.Errorf(`you have tag "%s" on both "%s" and "%s"`,
 					existingField.GetTagValue(),
 					existingField.Name,
 					field.Name,
@@ -191,8 +191,8 @@ func getChanges(fields []*Field, values []*StringSlice) (changes []*Change) {
 	return
 }
 
-// ApplyChanges sets the computed value changeset on the struct
-func (worker *worker) ApplyChanges() (errs []error) {
+// applyChanges sets the computed value changeset on the struct
+func (worker *worker) applyChanges() (errs []error) {
 	value := worker.reflectValue.Elem()
 	for _, change := range worker.Changes {
 		reflectValue := value.FieldByName(change.Field.Name)
@@ -220,7 +220,6 @@ func (worker *worker) ApplyChanges() (errs []error) {
 					change.StringSlice.Key,
 					change.Field.Name,
 				))
-				continue
 			}
 			reflectValue.SetInt(converted)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -232,7 +231,6 @@ func (worker *worker) ApplyChanges() (errs []error) {
 					change.StringSlice.Key,
 					change.Field.Name,
 				))
-				continue
 			}
 			reflectValue.SetUint(converted)
 		case reflect.Float32, reflect.Float64:
@@ -244,7 +242,6 @@ func (worker *worker) ApplyChanges() (errs []error) {
 					change.StringSlice.Key,
 					change.Field.Name,
 				))
-				continue
 			}
 			reflectValue.SetFloat(converted)
 		case reflect.Bool:
@@ -256,7 +253,6 @@ func (worker *worker) ApplyChanges() (errs []error) {
 					change.StringSlice.Key,
 					change.Field.Name,
 				))
-				continue
 			}
 			reflectValue.SetBool(converted)
 		default:
@@ -365,5 +361,5 @@ func RegexUnmarshal(text string, v interface{}, splitter interface{}) error {
 		// these should be validation errors, so fatal, so let's return
 		return multierror.Append(multiError, errs...)
 	}
-	return multierror.Append(multiError, worker.ApplyChanges()...).ErrorOrNil()
+	return multierror.Append(multiError, worker.applyChanges()...).ErrorOrNil()
 }

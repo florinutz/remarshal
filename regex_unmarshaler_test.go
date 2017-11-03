@@ -65,6 +65,32 @@ func TestCrossingTag(t *testing.T) {
 	}
 }
 
+func TestTagsConflict(t *testing.T) {
+	v := &struct {
+		Something string `regex_group:"Something"`
+		Smth      string `regex_group:"Something"`
+	}{}
+	err := RegexUnmarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
+	if err == nil {
+		t.Fatal("Tag conflict missed detection")
+	}
+}
+
+func TestUnsettable(t *testing.T) {
+	v := &struct{ something string }{}
+	splitter := func(string) (map[string]string, error) {
+		return map[string]string{"something": "not found"}, nil
+	}
+	err := RegexUnmarshal("a", v, splitter)
+	if err == nil {
+		t.Fatal("There should be an error")
+	}
+	str := err.Error()
+	if !strings.Contains(str, "can't set value") {
+		t.Fatal("shouldn't be able to set the value here")
+	}
+}
+
 func ExampleRegexUnmarshal() {
 	v := &struct {
 		One   string `regex_group:"first"`
