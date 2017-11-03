@@ -42,10 +42,10 @@ type Change struct {
 	StringSlice *StringSlice
 }
 
-// Worker does the heavy lifting behind the exported RegexUnmarshal function
-type Worker struct {
+// worker does the heavy lifting behind the exported RegexUnmarshal function
+type worker struct {
 	Text             string
-	Re               *regexp.Regexp
+	Splitter         *interface{}
 	V                *interface{}
 	reflectValue     *reflect.Value
 	Values           []*StringSlice
@@ -119,6 +119,7 @@ func lookupFields(typeOf reflect.Type) (fields []*Field, err error) {
 	}
 	return
 }
+
 func (field *Field) impersonate(targetField *Field) {
 	field.StructField = targetField.StructField
 	field.tagValue = targetField.tagValue
@@ -142,23 +143,6 @@ func (field *Field) isAmong(fields []*Field) *Field {
 		}
 	}
 	return nil
-}
-
-// Computes the regex string map (group => value)
-// The error is returned when there was no match
-func stringToValues(data string, re *regexp.Regexp) (values []*StringSlice, err error) {
-	match := re.FindStringSubmatch(data)
-	if match == nil {
-		return nil, errors.New("no regex match")
-	}
-	reGroups := re.SubexpNames()[1:]
-	for i, value := range match[1:] {
-		values = append(values, &StringSlice{
-			Key:   reGroups[i],
-			Value: value,
-		})
-	}
-	return
 }
 
 func getExtraStringMapKeys(fields []*Field, values []*StringSlice) (extra []string) {
@@ -208,7 +192,7 @@ func getChanges(fields []*Field, values []*StringSlice) (changes []*Change) {
 }
 
 // ApplyChanges sets the computed value changeset on the struct
-func (worker *Worker) ApplyChanges() (errs []error) {
+func (worker *worker) ApplyChanges() (errs []error) {
 	value := worker.reflectValue.Elem()
 	for _, change := range worker.Changes {
 		reflectValue := value.FieldByName(change.Field.Name)
@@ -300,10 +284,11 @@ func validate(v interface{}) (*reflect.Value, error) {
 	return &valueOf, nil
 }
 
-// NewWorker instantiates the Worker type, which implements the RegexUnmarshaler interface
-func NewWorker(text string, v interface{}, re *regexp.Regexp) (w *Worker, errs []error) {
+// NewWorker instantiates the worker type, which implements the RegexUnmarshaler interface.
+// The splitter should come in one of the formats accepted by the Split function.
+func NewWorker(text string, v interface{}, splitter interface{}) (w *worker, errs []error) {
 	var err error
-	w = &Worker{}
+	w = &worker{}
 
 	w.reflectValue, err = validate(v)
 	if err != nil {
@@ -315,10 +300,14 @@ func NewWorker(text string, v interface{}, re *regexp.Regexp) (w *Worker, errs [
 		// 2 or more tags point to the same re group
 		errs = append(errs, err)
 	}
-	values, err := stringToValues(text, re)
+	stringMap, err := Split(text, splitter)
 	if err != nil {
 		// no match
 		errs = append(errs, err)
+	}
+	values := []*StringSlice{}
+	for key, val := range stringMap {
+		values = append(values, &StringSlice{Key: key, Value: val})
 	}
 
 	w.V = &v
@@ -342,12 +331,12 @@ func NewWorker(text string, v interface{}, re *regexp.Regexp) (w *Worker, errs [
 
 	// displayed by String()
 	w.Text = text
-	w.Re = re
+	w.Splitter = &splitter
 
 	return
 }
 
-func (worker *Worker) String() string {
+func (worker *worker) String() string {
 	var render bytes.Buffer
 	err := workerTemplate.ExecuteTemplate(&render, "worker", worker)
 	if err != nil {
@@ -369,9 +358,9 @@ func (change *Change) String() string {
 }
 
 // RegexUnmarshal is an example implementation of the RegexUnmarshaler interface
-func RegexUnmarshal(text string, v interface{}, re *regexp.Regexp) error {
+func RegexUnmarshal(text string, v interface{}, splitter interface{}) error {
 	var multiError *multierror.Error
-	worker, errs := NewWorker(text, v, re)
+	worker, errs := NewWorker(text, v, splitter)
 	if len(errs) > 0 {
 		// these should be validation errors, so fatal, so let's return
 		return multierror.Append(multiError, errs...)

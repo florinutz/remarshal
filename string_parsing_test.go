@@ -8,7 +8,7 @@ import (
 )
 
 // This can be converted to stringSplitterFunc, which implements StringValuesMapper
-func simpleFuncSplitter(s string) (values map[string]string, err error) {
+func exampleFuncSplitter(s string) (values map[string]string, err error) {
 	aux := strings.Split(s, ",")
 	if len(aux) != 2 {
 		return nil, errors.New("error")
@@ -29,7 +29,7 @@ func TestFuncImport(t *testing.T) {
 	})
 
 	t.Run("func splitter", func(t *testing.T) {
-		values, err := Split("one,two", simpleFuncSplitter)
+		values, err := Split("one,two", exampleFuncSplitter)
 		if err != nil {
 			t.Fatal("error returned by Split function")
 		}
@@ -39,7 +39,7 @@ func TestFuncImport(t *testing.T) {
 	})
 
 	t.Run("func splitter error", func(t *testing.T) {
-		_, err := Split("one,two,three", simpleFuncSplitter)
+		_, err := Split("one,two,three", exampleFuncSplitter)
 		if err == nil {
 			t.Fatal("Error not returned")
 		}

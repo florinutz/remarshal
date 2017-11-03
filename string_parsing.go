@@ -2,6 +2,7 @@ package remarshal
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 )
 
@@ -16,18 +17,22 @@ type stringSplitterRegex regexp.Regexp
 // You'll have to supply the keys manually
 type stringSplitterFunc func(string) (map[string]string, error)
 
-// splitter should be a regex.Regexp or stringSplitterFunc-like function
+// Splitter should be a *regex.Regexp or a func(string) (map[string]string, error).
+// Both of them will split the string into a map.
 func Split(text string, splitter interface{}) (map[string]string, error) {
 	var spl StringValuesMapper = nil
-	switch splitter.(type) {
+
+	switch val := splitter.(type) {
 	case func(string) (map[string]string, error):
-		aux := splitter.(func(string) (map[string]string, error))
-		spl = stringSplitterFunc(aux)
-	case regexp.Regexp:
-		spl = splitter.(stringSplitterRegex)
+		spl = stringSplitterFunc(val)
+		break
+	case *regexp.Regexp:
+		spl = stringSplitterRegex(*val)
+		break
 	default:
-		return nil, errors.New("invalid string splitter")
+		return nil, fmt.Errorf("type %T is not valid for a splitter", splitter)
 	}
+
 	return spl.GetStringMap(text)
 }
 
