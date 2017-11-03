@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// This can be converted to stringSplitterFunc, which implements StringValuesMapper
+// This can be converted to stringSplitterFunc, which implements StringMapper
 func someFuncSplitter(s string) (values map[string]string, err error) {
 	aux := strings.Split(s, ",")
 	if len(aux) != 2 {
@@ -49,7 +49,7 @@ func TestFuncImport(t *testing.T) {
 
 type GenericSplitter struct{ Host, Port string }
 
-// implements StringValuesMapper
+// implements StringMapper
 func (spl GenericSplitter) GetStringMap(s string) (map[string]string, error) {
 	host, port, _ := net.SplitHostPort(s)
 	return map[string]string{

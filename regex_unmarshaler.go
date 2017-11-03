@@ -19,7 +19,7 @@ import (
 // Remarshaler describes the main functionality of this package.
 // Something that implements it can extract data into the last argument's fields.
 type Remarshaler interface {
-	Remarshal(string, interface{}, StringValuesMapper) error
+	Remarshal(string, interface{}, StringMapper) error
 }
 
 // StructTag is the custom struct tag name

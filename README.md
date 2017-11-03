@@ -12,9 +12,9 @@ func Remarshal(text string, v interface{}, splitter interface{}) error
 The splitter can be one of:
 * `*regexp.Regexp`
 * `func(string) (map[string]string, error)`
-* anything that implements `StringValuesMapper`
+* anything that implements `StringMapper`
 ```go
-type StringValuesMapper interface {
+type StringMapper interface {
 	GetStringMap(string) (map[string]string, error)
 }
 ```
