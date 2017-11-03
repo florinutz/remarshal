@@ -92,7 +92,7 @@ func TestUnsettable(t *testing.T) {
 	}
 }
 
-func ExampleRegexUnmarshal() {
+func ExampleRemarshal() {
 	v := &struct {
 		One   string `regex_group:"first"`
 		Two   string // regex_group defaults to Two
@@ -110,7 +110,7 @@ func ExampleRegexUnmarshal() {
 	// Output: &struct { One string "regex_group:\"first\""; Two string; Three string "regex_group:\"Two\""; Four string "regex_group:\"Three\"" }{One:"first", Two:"", Three:"second", Four:"third"}
 }
 
-func ExampleRegexUnmarshalFuncSplitter() {
+func ExampleRemarshal_FuncSplitter() {
 	v := &struct{ Host, Port string }{}
 
 	splitter := func(s string) (map[string]string, error) {
@@ -130,7 +130,7 @@ func ExampleRegexUnmarshalFuncSplitter() {
 	// Output: &struct { Host string; Port string }{Host:"localhost", Port:"12345"}
 }
 
-func BenchmarkRegexUnmarshal(b *testing.B) {
+func BenchmarkRemarshal(b *testing.B) {
 	v := &struct {
 		One   string `regex_group:"first"`
 		Two   string // regex_group defaults to Two
