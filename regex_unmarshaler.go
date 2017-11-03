@@ -214,45 +214,25 @@ func (worker *worker) applyChanges() (errs []error) {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			converted, err := strconv.ParseInt(newValue, 0, strconv.IntSize)
 			if err != nil {
-				errStr := "value '%s' of regex group '%s' can't be converted to int in order to be assigned to field '%s'"
-				errs = append(errs, fmt.Errorf(errStr,
-					change.StringSlice.Value,
-					change.StringSlice.Key,
-					change.Field.Name,
-				))
+				addConversionError(&errs, change, "int")
 			}
 			reflectValue.SetInt(converted)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			converted, err := strconv.ParseUint(newValue, 0, strconv.IntSize)
 			if err != nil {
-				errStr := "value '%s' of regex group '%s' can't be converted to int in order to be assigned to field '%s'"
-				errs = append(errs, fmt.Errorf(errStr,
-					change.StringSlice.Value,
-					change.StringSlice.Key,
-					change.Field.Name,
-				))
+				addConversionError(&errs, change, "uint")
 			}
 			reflectValue.SetUint(converted)
 		case reflect.Float32, reflect.Float64:
 			converted, err := strconv.ParseFloat(newValue, 0)
 			if err != nil {
-				errStr := "value '%s' of regex group '%s' can't be converted to float in order to be assigned to field '%s'"
-				errs = append(errs, fmt.Errorf(errStr,
-					change.StringSlice.Value,
-					change.StringSlice.Key,
-					change.Field.Name,
-				))
+				addConversionError(&errs, change, "float")
 			}
 			reflectValue.SetFloat(converted)
 		case reflect.Bool:
 			converted, err := strconv.ParseBool(newValue)
 			if err != nil {
-				errStr := "value '%s' of regex group '%s' can't be converted to bool in order to be assigned to field '%s'"
-				errs = append(errs, fmt.Errorf(errStr,
-					change.StringSlice.Value,
-					change.StringSlice.Key,
-					change.Field.Name,
-				))
+				addConversionError(&errs, change, "bool")
 			}
 			reflectValue.SetBool(converted)
 		default:
@@ -266,6 +246,15 @@ func (worker *worker) applyChanges() (errs []error) {
 		}
 	}
 	return
+}
+func addConversionError(errs *[]error, change *Change, kind string) {
+	errStr := "value '%s' of regex group '%s' can't be converted to %s in order to be assigned to field '%s'"
+	*errs = append(*errs, fmt.Errorf(errStr,
+		change.StringSlice.Value,
+		change.StringSlice.Key,
+		kind,
+		change.Field.Name,
+	))
 }
 
 func validate(v interface{}) (*reflect.Value, error) {
