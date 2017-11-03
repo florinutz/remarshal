@@ -110,7 +110,7 @@ func ExampleRemarshal() {
 	// Output: &struct { One string "regex_group:\"first\""; Two string; Three string "regex_group:\"Two\""; Four string "regex_group:\"Three\"" }{One:"first", Two:"", Three:"second", Four:"third"}
 }
 
-func ExampleRemarshal2() {
+func ExampleRemarshal_funcSplitter() {
 	v := &struct{ Host, Port string }{}
 
 	// func splitter:
