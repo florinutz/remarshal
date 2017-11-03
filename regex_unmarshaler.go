@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
@@ -17,41 +16,41 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-// RegexUnmarshaler describes the main functionality of this package.
+// Remarshaler describes the main functionality of this package.
 // Something that implements it can extract data into the last argument's fields.
-type RegexUnmarshaler interface {
-	RegexUnmarshal([]byte, interface{}, *regexp.Regexp) error
+type Remarshaler interface {
+	Remarshal(string, interface{}, StringValuesMapper) error
 }
 
 // StructTag is the custom struct tag name
 const StructTag string = "regex_group"
 
-type Field struct {
+type field struct {
 	reflect.StructField
 	tagValue         *string
 	tagIsSetManually *bool
 }
 
-type StringSlice struct {
+type stringSlice struct {
 	Key   string
 	Value string
 }
 
-type Change struct {
-	Field       *Field
-	StringSlice *StringSlice
+type change struct {
+	Field       *field
+	StringSlice *stringSlice
 }
 
-// worker does the heavy lifting behind the exported RegexUnmarshal function
+// worker does the heavy lifting behind the exported Remarshal function
 type worker struct {
 	Text             string
 	Splitter         *interface{}
 	V                *interface{}
 	reflectValue     *reflect.Value
-	Values           []*StringSlice
-	Fields           []*Field
-	Changes          []*Change
-	ExtraFields      []*Field
+	Values           []*stringSlice
+	Fields           []*field
+	Changes          []*change
+	ExtraFields      []*field
 	ExtraRegexGroups []string
 }
 
@@ -80,25 +79,25 @@ func init() {
 	workerTemplate = template.Must(template.New("worker").Funcs(fm).Parse(str))
 }
 
-func (field *Field) lookupTagIfNeeded() {
+func (field *field) lookupTagIfNeeded() {
 	if field.tagValue == nil || field.tagIsSetManually == nil {
 		tagValue, setManually := field.Tag.Lookup(StructTag)
 		field.tagValue, field.tagIsSetManually = &tagValue, &setManually
 	}
 }
 
-func (field *Field) GetTagValue() string {
+func (field *field) GetTagValue() string {
 	field.lookupTagIfNeeded()
 	return *field.tagValue
 }
 
-func (field *Field) isTagSetManually() bool {
+func (field *field) isTagSetManually() bool {
 	field.lookupTagIfNeeded()
 	return *field.tagIsSetManually
 }
 
 // Lookup for interesting fields
-func lookupFields(typeOf reflect.Type) (fields []*Field, err error) {
+func lookupFields(typeOf reflect.Type) (fields []*field, err error) {
 	// parsing of fields
 	for i := 0; i < typeOf.NumField(); i++ {
 		field := makeField(typeOf.Field(i))
@@ -120,14 +119,14 @@ func lookupFields(typeOf reflect.Type) (fields []*Field, err error) {
 	return
 }
 
-func (field *Field) impersonate(targetField *Field) {
+func (field *field) impersonate(targetField *field) {
 	field.StructField = targetField.StructField
 	field.tagValue = targetField.tagValue
 	field.tagIsSetManually = targetField.tagIsSetManually
 }
 
-func makeField(f reflect.StructField) *Field {
-	field := &Field{f, nil, nil}
+func makeField(f reflect.StructField) *field {
+	field := &field{f, nil, nil}
 	field.lookupTagIfNeeded()
 	if *field.tagValue == "" {
 		field.tagValue = &field.Name
@@ -136,7 +135,7 @@ func makeField(f reflect.StructField) *Field {
 }
 
 // Returns the existing field or nil
-func (field *Field) isAmong(fields []*Field) *Field {
+func (field *field) isAmong(fields []*field) *field {
 	for _, f := range fields {
 		if field.GetTagValue() == f.GetTagValue() {
 			return f
@@ -145,7 +144,7 @@ func (field *Field) isAmong(fields []*Field) *Field {
 	return nil
 }
 
-func getExtraStringMapKeys(fields []*Field, values []*StringSlice) (extra []string) {
+func getExtraStringMapKeys(fields []*field, values []*stringSlice) (extra []string) {
 	extra = []string{}
 	for _, value := range values {
 		match := false
@@ -162,7 +161,7 @@ func getExtraStringMapKeys(fields []*Field, values []*StringSlice) (extra []stri
 	return
 }
 
-func getExtraTags(fields []*Field, values []*StringSlice) (extra []*Field) {
+func getExtraTags(fields []*field, values []*stringSlice) (extra []*field) {
 	for _, field := range fields {
 		match := false
 		for _, value := range values {
@@ -177,11 +176,11 @@ func getExtraTags(fields []*Field, values []*StringSlice) (extra []*Field) {
 	return
 }
 
-func getChanges(fields []*Field, values []*StringSlice) (changes []*Change) {
+func getChanges(fields []*field, values []*stringSlice) (changes []*change) {
 	for _, value := range values {
 		for _, field := range fields {
 			if field.GetTagValue() == value.Key {
-				changes = append(changes, &Change{
+				changes = append(changes, &change{
 					StringSlice: value,
 					Field:       field,
 				})
@@ -247,7 +246,8 @@ func (worker *worker) applyChanges() (errs []error) {
 	}
 	return
 }
-func addConversionError(errs *[]error, change *Change, kind string) {
+
+func addConversionError(errs *[]error, change *change, kind string) {
 	errStr := "value '%s' of regex group '%s' can't be converted to %s in order to be assigned to field '%s'"
 	*errs = append(*errs, fmt.Errorf(errStr,
 		change.StringSlice.Value,
@@ -269,9 +269,9 @@ func validate(v interface{}) (*reflect.Value, error) {
 	return &valueOf, nil
 }
 
-// NewWorker instantiates the worker type, which implements the RegexUnmarshaler interface.
+// newWorker instantiates the worker type, which implements the Remarshaler interface.
 // The splitter should come in one of the formats accepted by the Split function.
-func NewWorker(text string, v interface{}, splitter interface{}) (w *worker, errs []error) {
+func newWorker(text string, v interface{}, splitter interface{}) (w *worker, errs []error) {
 	var err error
 	w = &worker{}
 
@@ -290,9 +290,9 @@ func NewWorker(text string, v interface{}, splitter interface{}) (w *worker, err
 		// no match
 		errs = append(errs, err)
 	}
-	values := []*StringSlice{}
+	values := []*stringSlice{}
 	for key, val := range stringMap {
-		values = append(values, &StringSlice{Key: key, Value: val})
+		values = append(values, &stringSlice{Key: key, Value: val})
 	}
 
 	w.V = &v
@@ -330,22 +330,22 @@ func (worker *worker) String() string {
 	return render.String()
 }
 
-func (field *Field) String() string {
+func (field *field) String() string {
 	return fmt.Sprintf("%d. %s `%s`", field.Index[0]+1, field.Name, *field.tagValue)
 }
 
-func (v *StringSlice) String() string {
+func (v *stringSlice) String() string {
 	return fmt.Sprintf("%s: %s", v.Key, v.Value)
 }
 
-func (change *Change) String() string {
+func (change *change) String() string {
 	return fmt.Sprintf("%s => %s", change.Field.Name, change.StringSlice.Value)
 }
 
-// RegexUnmarshal is an example implementation of the RegexUnmarshaler interface
-func RegexUnmarshal(text string, v interface{}, splitter interface{}) error {
+// Remarshal is an example implementation of the Remarshaler interface
+func Remarshal(text string, v interface{}, splitter interface{}) error {
 	var multiError *multierror.Error
-	worker, errs := NewWorker(text, v, splitter)
+	worker, errs := newWorker(text, v, splitter)
 	if len(errs) > 0 {
 		// these should be validation errors, so fatal, so let's return
 		return multierror.Append(multiError, errs...)

@@ -11,6 +11,7 @@ type StringValuesMapper interface {
 	GetStringMap(string) (map[string]string, error)
 }
 
+// The map is returned based on the regex groups and the values that the split associates to them
 type stringSplitterRegex regexp.Regexp
 
 // This could come handy for instance where you have to use net.SplitHostPort rather than regex
@@ -25,12 +26,14 @@ func Split(text string, splitter interface{}) (map[string]string, error) {
 	switch val := splitter.(type) {
 	case func(string) (map[string]string, error):
 		spl = stringSplitterFunc(val)
-		break
 	case *regexp.Regexp:
 		spl = stringSplitterRegex(*val)
-		break
 	default:
-		return nil, fmt.Errorf("type %T is not valid for a splitter", splitter)
+		if unknownMapper, ok := splitter.(StringValuesMapper); ok {
+			spl = unknownMapper
+		} else {
+			return nil, fmt.Errorf("type %T is not valid for a splitter", splitter)
+		}
 	}
 
 	return spl.GetStringMap(text)

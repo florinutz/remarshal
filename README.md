@@ -6,26 +6,21 @@
 The package looks up for values in a string and then attaches them to an existing struct's fields. It exposes one interface `RegexUnmarshaler`
 
 ```go
-type RegexUnmarshaler interface {
-	RegexUnmarshal([]byte, *regexp.Regexp, interface{}) error
+func Remarshal(text string, v interface{}, splitter interface{}) error
+```
+
+The splitter can be one of:
+* `*regexp.Regexp`
+* `func(string) (map[string]string, error)`
+* anything that implements `StringValuesMapper`
+```go
+type StringValuesMapper interface {
+	GetStringMap(string) (map[string]string, error)
 }
 ```
 
-and a function that implements it
-
-```go
-func RegexUnmarshal(text string, re *regexp.Regexp, v interface{}) error
-```
-
-## Example
-```bash
-go get github.com/florinutz/remarshal
-```
-then
-```go
-import "github.com/florinutz/remarshal"
-```
-and
+## Examples
+### regex splitter
 ```go
 v := &struct {
     One   string `regex_group:"first"`
@@ -33,9 +28,9 @@ v := &struct {
     Three string `regex_group:"Two"` // this takes precedence over Two
     Four  string `regex_group:"Three"`
 }{}
-re := regexp.MustCompile(`^(?P<first>.*)\|(?P<Two>.*)\|(?P<Three>.*)\|(?P<Last>.*)$`)
+splitter := regexp.MustCompile(`^(?P<first>.*)\|(?P<Two>.*)\|(?P<Three>.*)\|(?P<Last>.*)$`)
 
-err := remarshal.RegexUnmarshal("first|second|third|... and so on", re, v)
+err := remarshal.Remarshal("first|second|third|... and so on", v, splitter)
 if err != nil {
     fmt.Println(err)
 }
@@ -45,4 +40,25 @@ fmt.Printf("%#v", v)
 
 ```
 
-Please see the [tests](https://github.com/florinutz/remarshal/blob/master/remarshal_test.go) for more details.
+### function splitter
+```go
+v := &struct{ Host, Port string }{}
+
+splitter := func(s string) (map[string]string, error) {
+    host, port, _ := net.SplitHostPort(s)
+    return map[string]string{
+        "Host": host,
+        "Port": port,
+    }, nil
+}
+
+err := remarshal.Remarshal("localhost:12345", v, splitter)
+if err != nil {
+    fmt.Println(err)
+}
+
+fmt.Printf("%#v", v)
+// Output: &struct { Host string; Port string }{Host:"localhost", Port:"12345"}
+```
+
+Remarshal returns multiple errors packed into one using the [hashicorp/multierror](https://github.com/hashicorp/go-multierror) package. You can unpack them.

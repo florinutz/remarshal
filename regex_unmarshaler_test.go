@@ -2,6 +2,7 @@ package remarshal
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ func TestDataTypes(t *testing.T) {
 		Float32 float32
 		Float64 float64
 	}{}
-	err := RegexUnmarshal(
+	err := Remarshal(
 		"string|true|42|42|42.7|42.9",
 		v,
 		regexp.MustCompile(`^(?P<String>.*)\|(?P<Bool>.*)\|(?P<Int16>.*)\|(?P<Uint64>.*)\|(?P<Float32>.*)\|(?P<Float64>.*)$`))
@@ -30,7 +31,7 @@ func TestBasicFunctionality(t *testing.T) {
 		Smth     string `regex_group:"Something"`
 		SmthElse string
 	}{}
-	err := RegexUnmarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
+	err := Remarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +41,7 @@ func TestBasicFunctionality(t *testing.T) {
 }
 
 func TestInvalidStructTag(t *testing.T) {
-	err := RegexUnmarshal(
+	err := Remarshal(
 		"a|b",
 		&struct {
 			Smth string `regex_group:"boo"`
@@ -56,7 +57,7 @@ func TestCrossingTag(t *testing.T) {
 		Something string
 		Smth      string `regex_group:"Something"`
 	}{}
-	err := RegexUnmarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
+	err := Remarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func TestTagsConflict(t *testing.T) {
 		Something string `regex_group:"Something"`
 		Smth      string `regex_group:"Something"`
 	}{}
-	err := RegexUnmarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
+	err := Remarshal("a|b", v, regexp.MustCompile(`^(?P<SomethingElse>.*)\|(?P<Something>.*)$`))
 	if err == nil {
 		t.Fatal("Tag conflict missed detection")
 	}
@@ -81,7 +82,7 @@ func TestUnsettable(t *testing.T) {
 	splitter := func(string) (map[string]string, error) {
 		return map[string]string{"something": "not found"}, nil
 	}
-	err := RegexUnmarshal("a", v, splitter)
+	err := Remarshal("a", v, splitter)
 	if err == nil {
 		t.Fatal("There should be an error")
 	}
@@ -98,15 +99,35 @@ func ExampleRegexUnmarshal() {
 		Three string `regex_group:"Two"` // this takes precedence over Two
 		Four  string `regex_group:"Three"`
 	}{}
-	re := regexp.MustCompile(`^(?P<first>.*)\|(?P<Two>.*)\|(?P<Three>.*)\|(?P<Last>.*)$`)
+	splitter := regexp.MustCompile(`^(?P<first>.*)\|(?P<Two>.*)\|(?P<Three>.*)\|(?P<Last>.*)$`)
 
-	err := RegexUnmarshal("first|second|third|... and so on", v, re)
+	err := Remarshal("first|second|third|... and so on", v, splitter)
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	fmt.Printf("%#v", v)
 	// Output: &struct { One string "regex_group:\"first\""; Two string; Three string "regex_group:\"Two\""; Four string "regex_group:\"Three\"" }{One:"first", Two:"", Three:"second", Four:"third"}
+}
+
+func ExampleRegexUnmarshalFuncSplitter() {
+	v := &struct{ Host, Port string }{}
+
+	splitter := func(s string) (map[string]string, error) {
+		host, port, _ := net.SplitHostPort(s)
+		return map[string]string{
+			"Host": host,
+			"Port": port,
+		}, nil
+	}
+
+	err := Remarshal("localhost:12345", v, splitter)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Printf("%#v", v)
+	// Output: &struct { Host string; Port string }{Host:"localhost", Port:"12345"}
 }
 
 func BenchmarkRegexUnmarshal(b *testing.B) {
@@ -119,6 +140,6 @@ func BenchmarkRegexUnmarshal(b *testing.B) {
 	re := regexp.MustCompile(`^(?P<first>.*)\|(?P<Two>.*)\|(?P<Three>.*)\|(?P<Last>.*)$`)
 
 	for i := 0; i < b.N; i++ {
-		RegexUnmarshal("first|second|third|... and so on", v, re)
+		Remarshal("first|second|third|... and so on", v, re)
 	}
 }
